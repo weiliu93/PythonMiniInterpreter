@@ -56,24 +56,41 @@ class VirtualMachine(object):
         defaults = defaults if defaults else []
         total_args = code_obj.co_argcount
         default_offset = total_args - len(defaults)
-
+        # all positional argument names
+        arg_names = set([code_obj.co_varnames[index] for index in range(total_args)])
         # Use defaults to initialize local namespace first
         for index in range(default_offset, total_args):
             arg_name = code_obj.co_varnames[index]
             locals[arg_name] = defaults[index - default_offset]
         # Then use position arguments
         for index in range(len(positional_arguments)):
-            arg_name = code_obj.co_varnames[index]
-            locals[arg_name] = positional_arguments[index]
+            if index < total_args:
+                arg_name = code_obj.co_varnames[index]
+                locals[arg_name] = positional_arguments[index]
+            else:
+                # *args usage, in python it is a tuple, but I think list could achieve same goal
+                if code_obj.co_flags == 71 or code_obj.co_flags == 79:
+                    arg_name = code_obj.co_varnames[total_args]
+                    locals.setdefault(arg_name, [])
+                    locals[arg_name].append(positional_arguments[index])
+                else:
+                    raise VirtualMachineInvalidInstructionException('Too many positional arguments, `{}`'.format(positional_arguments[index]))
         # Finally use keyword arguments
         for keyword_name, arg in kw_arguments.items():
-            if keyword_name not in locals:
+            # legal keyword argument
+            if keyword_name in arg_names:
                 locals[keyword_name] = arg
             else:
-                raise VirtualMachineInvalidInstructionException(
-                    "Argument Re-assignment in positional argument and keyword argument"
-                )
-
+                kwargs_name = None
+                if code_obj.co_flags == 75:
+                    kwargs_name = code_obj.co_varnames[total_args]
+                elif code_obj.co_flags == 79:
+                    kwargs_name = code_obj.co_varnames[total_args + 1]
+                if kwargs_name:
+                    locals.setdefault(kwargs_name, {})
+                    locals[kwargs_name][keyword_name] = arg
+                else:
+                    raise VirtualMachineInvalidInstructionException('Invalid keyword argument, `{} = {}`'.format(keyword_name, arg))
         frame = Frame(code_obj, f_locals=locals, f_globals=globals, f_back=f_back)
         return frame
 
@@ -452,7 +469,8 @@ class VirtualMachine(object):
 
     def exec_MAKE_FUNCTION(self, frame, instruction):
         func_code_object, func_name = frame.popn(2)
-        # TODO actually I don't know how MAKE_FUNCTION implemented..... Does 0, 1, 9 have any special meaning?
+        # TODO actually I don't know how MAKE_FUNCTION implemented..... Does 0, 1, 8, 9 have any special meaning?
+        # TODO not familiar with closure design
         if instruction.op_arg == 0:
             # Function without default argument values
             func = Function(func_name, func_code_object, frame.f_globals)
@@ -467,10 +485,6 @@ class VirtualMachine(object):
                 func_defaults=default_tuple,
             )
             frame.push(func)
-        elif instruction.op_arg == 9:
-            # TODO closure manipulation
-
-            pass
         else:
             raise VirtualMachineInvalidInstructionException(
                 "Unknown make function arg `{}`".format(instruction.op_arg)
@@ -579,6 +593,15 @@ class VirtualMachine(object):
         frame.f_lasti += 1
 
     """
+    --------------------------------Packing operations----------------------------------
+    """
+    def exec_UNPACK_SEQUENCE(self, frame, instruction):
+        tuple_obj = frame.pop()
+        for value in reversed(list(tuple_obj)):
+            frame.push(value)
+        frame.f_lasti += 1
+
+    """
     ----------------------------------Stack operations----------------------------------
     """
 
@@ -654,7 +677,7 @@ class VirtualMachine(object):
 
 
 if __name__ == "__main__":
-    code = open("./code.py").read()
+    code = open("./test_code.py").read()
     ast_root = ast.parse(code)
     code_object = compile(ast_root, "code", "exec")
 

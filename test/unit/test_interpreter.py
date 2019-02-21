@@ -33,3 +33,18 @@ def test_complicated_iterator_scenario():
     vm.reset_std_stream()
 
     assert string_output.getvalue().split() == list(map(str, [5, 8, 11, 14, 17, 20, 23, 26, 29, 32]))
+
+
+def test_complicated_arguments_passing():
+    package_path = os.path.join(test_packages, 'complicated_arguments_passing')
+    test_file = os.path.join(package_path, 'example.py')
+
+    string_output = io.StringIO()
+    vm = VirtualMachine()
+    vm.set_std_stream(vm_out=string_output)
+    vm.run_compiled_code(open(test_file).read())
+    vm.reset_std_stream()
+
+    target = ['301', '20', '30', 'name', 'haha', 'pwd', 'hehe']
+    assert string_output.getvalue().split() == target
+
