@@ -68,7 +68,11 @@ class Frame(object):
         self.level_stack.append(self.current_block_level())
 
     def is_completed(self):
-        return self.f_lasti == len(self.instruction_sequence)
+        # all instructions completed or return_value executed
+        return self.f_lasti == len(self.instruction_sequence) or (
+            self.f_lasti > 0
+            and self.instruction_sequence[self.f_lasti].op_name == "RETURN_VALUE"
+        )
 
     def current_block_level(self):
         return len(self.blocks)

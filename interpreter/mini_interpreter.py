@@ -75,7 +75,11 @@ class VirtualMachine(object):
                     locals.setdefault(arg_name, [])
                     locals[arg_name].append(positional_arguments[index])
                 else:
-                    raise VirtualMachineInvalidInstructionException('Too many positional arguments, `{}`'.format(positional_arguments[index]))
+                    raise VirtualMachineInvalidInstructionException(
+                        "Too many positional arguments, `{}`".format(
+                            positional_arguments[index]
+                        )
+                    )
         # Finally use keyword arguments
         for keyword_name, arg in kw_arguments.items():
             # legal keyword argument
@@ -91,7 +95,9 @@ class VirtualMachine(object):
                     locals.setdefault(kwargs_name, {})
                     locals[kwargs_name][keyword_name] = arg
                 else:
-                    raise VirtualMachineInvalidInstructionException('Invalid keyword argument, `{} = {}`'.format(keyword_name, arg))
+                    raise VirtualMachineInvalidInstructionException(
+                        "Invalid keyword argument, `{} = {}`".format(keyword_name, arg)
+                    )
         frame = Frame(code_obj, f_locals=locals, f_globals=globals, f_back=f_back)
         # closure
         closure = closure or []
@@ -136,7 +142,7 @@ class VirtualMachine(object):
                     self.exec_ILLEGAL_INSTRUCTION,
                 )(frame, next_instruction)
             if why:
-                # break, exception, etc.
+                # break, exception, return_value, etc.
                 break
         return why
 
@@ -197,7 +203,9 @@ class VirtualMachine(object):
         elif name in frame.f_builtins:
             del frame.f_builtins[name]
         else:
-            raise VirtualMachineInvalidInstructionException('Delete invalid variable `{}`'.format(name))
+            raise VirtualMachineInvalidInstructionException(
+                "Delete invalid variable `{}`".format(name)
+            )
         frame.f_lasti += 1
 
     def exec_LOAD_FAST(self, frame, instruction):
@@ -218,6 +226,7 @@ class VirtualMachine(object):
     def exec_RETURN_VALUE(self, frame, instruction):
         frame.return_value = frame.pop()
         frame.f_lasti += 1
+        return "return_value"
 
     def exec_LOAD_ATTR(self, frame, instruction):
         obj = frame.pop()
@@ -267,14 +276,14 @@ class VirtualMachine(object):
             del frame.f_builtins[name]
         else:
             raise VirtualMachineInvalidInstructionException(
-                'Delete global failed, name is not found in global and builtin namespace'
+                "Delete global failed, name is not found in global and builtin namespace"
             )
         frame.f_lasti += 1
 
     def exec_STORE_DEREF(self, frame, instruction):
         value = frame.pop()
         name = self._get_cell_name(frame, instruction)
-        frame.cells.setdefault(name, Cell(name, ''))
+        frame.cells.setdefault(name, Cell(name, ""))
         frame.cells[name].set(value)
         frame.f_lasti += 1
 
@@ -295,6 +304,11 @@ class VirtualMachine(object):
         else:
             index -= len(frame.f_code.co_cellvars)
             return frame.f_code.co_freevars[index]
+
+    def exec_STORE_SUBSCR(self, frame, instruction):
+        target, obj, subscr = frame.popn(3)
+        obj[subscr] = target
+        frame.f_lasti += 1
 
     """
     ------------------------------Control flow statements------------------------------
@@ -559,20 +573,19 @@ class VirtualMachine(object):
             # Function with closure
             closure = frame.pop()
             func = Function(
-                func_name,
-                func_code_object,
-                frame.f_globals,
-                func_closure=closure)
+                func_name, func_code_object, frame.f_globals, func_closure=closure
+            )
             frame.push(func)
         elif instruction.op_arg == 9:
             # Function with closure and default arguments
             default_tuple, closure = frame.popn(2)
             func = Function(
-                    func_name,
-                    func_code_object,
-                    frame.f_globals,
-                    func_defaults=default_tuple,
-                    func_closure=closure)
+                func_name,
+                func_code_object,
+                frame.f_globals,
+                func_defaults=default_tuple,
+                func_closure=closure,
+            )
             frame.push(func)
         else:
             raise VirtualMachineInvalidInstructionException(
@@ -684,6 +697,7 @@ class VirtualMachine(object):
     """
     --------------------------------Packing operations----------------------------------
     """
+
     def exec_UNPACK_SEQUENCE(self, frame, instruction):
         tuple_obj = frame.pop()
         for value in reversed(list(tuple_obj)):
