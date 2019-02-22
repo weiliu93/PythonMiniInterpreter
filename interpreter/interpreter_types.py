@@ -35,8 +35,8 @@ class Frame(object):
         self.return_value = None
         # blocks
         self.blocks = []
-        # TODO closure(free and cell)
-
+        # cells for closure
+        self.cells = {}
 
     def stack_size(self):
         return len(self.stack)
@@ -109,6 +109,18 @@ class Iterator(object):
             return retval
 
     __next__ = next
+
+
+class Cell(object):
+    def __init__(self, name, contents):
+        self.name = name
+        self.contents = contents
+
+    def get(self):
+        return self.contents
+
+    def set(self, contents):
+        self.contents = contents
 
 
 class Instruction(object):

@@ -1,7 +1,7 @@
 """
 basic functionality, support common operators and load, store
 """
-from interpreter_types import Frame, Function, Block, Iterator
+from interpreter_types import Frame, Function, Block, Iterator, Cell
 from interpreter_exceptions import (
     VirtualMachineParsingException,
     VirtualMachineInvalidInstructionException,
@@ -48,6 +48,7 @@ class VirtualMachine(object):
         positional_arguments=None,
         kw_arguments=None,
         defaults=None,
+        closure=None,
         f_back=None,
     ):
         locals = locals if locals else {}
@@ -92,6 +93,10 @@ class VirtualMachine(object):
                 else:
                     raise VirtualMachineInvalidInstructionException('Invalid keyword argument, `{} = {}`'.format(keyword_name, arg))
         frame = Frame(code_obj, f_locals=locals, f_globals=globals, f_back=f_back)
+        # closure
+        closure = closure or []
+        for cell in closure:
+            frame.cells[cell.name] = cell
         return frame
 
     def resume_frame(self, frame):
@@ -183,6 +188,18 @@ class VirtualMachine(object):
         frame.f_locals[name] = value
         frame.f_lasti += 1
 
+    def exec_DELETE_NAME(self, frame, instruction):
+        name = frame.f_code.co_names[instruction.op_arg]
+        if name in frame.f_locals:
+            del frame.f_locals[name]
+        elif name in frame.f_globals:
+            del frame.f_globals[name]
+        elif name in frame.f_builtins:
+            del frame.f_builtins[name]
+        else:
+            raise VirtualMachineInvalidInstructionException('Delete invalid variable `{}`'.format(name))
+        frame.f_lasti += 1
+
     def exec_LOAD_FAST(self, frame, instruction):
         name = frame.f_code.co_varnames[instruction.op_arg]
         frame.push(frame.f_locals[name])
@@ -191,6 +208,11 @@ class VirtualMachine(object):
     def exec_STORE_FAST(self, frame, instruction):
         name = frame.f_code.co_varnames[instruction.op_arg]
         frame.f_locals[name] = frame.pop()
+        frame.f_lasti += 1
+
+    def exec_DELETE_FAST(self, frame, instruction):
+        name = frame.f_code.co_varnames[instruction.op_arg]
+        del frame.f_locals[name]
         frame.f_lasti += 1
 
     def exec_RETURN_VALUE(self, frame, instruction):
@@ -209,22 +231,70 @@ class VirtualMachine(object):
         setattr(obj, name, target)
         frame.f_lasti += 1
 
+    def exec_DELETE_ATTR(self, frame, instruction):
+        obj = frame.pop()
+        name = frame.f_code.co_names[instruction.op_arg]
+        delattr(obj, name)
+        frame.f_lasti += 1
+
     def exec_LOAD_GLOBAL(self, frame, instruction):
         name = frame.f_code.co_names[instruction.op_arg]
         # check global namespace first
         if name in frame.f_globals:
             obj = frame.f_globals[name]
             frame.push(obj)
-            frame.f_lasti += 1
         # then check builtin namespace
         elif name in frame.f_builtins:
             obj = frame.f_builtins[name]
             frame.push(obj)
-            frame.f_lasti += 1
         else:
             raise VirtualMachineInvalidInstructionException(
-                "Load global failed, attribute name is not found in global and builtin namespace"
+                "Load global failed, name is not found in global and builtin namespace"
             )
+        frame.f_lasti += 1
+
+    def exec_STORE_GLOBAL(self, frame, instruction):
+        value = frame.pop()
+        name = frame.f_code.co_names[instruction.op_arg]
+        frame.f_globals[name] = value
+        frame.f_lasti += 1
+
+    def exec_DELETE_GLOBAL(self, frame, instruction):
+        name = frame.f_code.co_names[instruction.op_arg]
+        if name in frame.f_globals:
+            del frame.f_globals[name]
+        elif name in frame.f_builtins:
+            del frame.f_builtins[name]
+        else:
+            raise VirtualMachineInvalidInstructionException(
+                'Delete global failed, name is not found in global and builtin namespace'
+            )
+        frame.f_lasti += 1
+
+    def exec_STORE_DEREF(self, frame, instruction):
+        value = frame.pop()
+        name = self._get_cell_name(frame, instruction)
+        frame.cells.setdefault(name, Cell(name, ''))
+        frame.cells[name].set(value)
+        frame.f_lasti += 1
+
+    def exec_LOAD_DEREF(self, frame, instruction):
+        name = self._get_cell_name(frame, instruction)
+        frame.push(frame.cells[name].get())
+        frame.f_lasti += 1
+
+    def exec_LOAD_CLOSURE(self, frame, instruction):
+        name = self._get_cell_name(frame, instruction)
+        frame.push(frame.cells[name])
+        frame.f_lasti += 1
+
+    def _get_cell_name(self, frame, instruction):
+        index = instruction.op_arg
+        if index < len(frame.f_code.co_cellvars):
+            return frame.f_code.co_cellvars[index]
+        else:
+            index -= len(frame.f_code.co_cellvars)
+            return frame.f_code.co_freevars[index]
 
     """
     ------------------------------Control flow statements------------------------------
@@ -393,6 +463,7 @@ class VirtualMachine(object):
                 frame.f_globals,
                 positional_arguments=arguments,
                 defaults=func.func_defaults,
+                closure=func.func_closure,
                 f_back=self._fetch_current_frame(),
             )
             # generator function
@@ -436,6 +507,7 @@ class VirtualMachine(object):
                 positional_arguments=positional_arguments,
                 kw_arguments=keywords_arguments,
                 defaults=func.func_defaults,
+                closure=func.func_closure,
                 f_back=self._fetch_current_frame(),
             )
             # generator function
@@ -469,8 +541,6 @@ class VirtualMachine(object):
 
     def exec_MAKE_FUNCTION(self, frame, instruction):
         func_code_object, func_name = frame.popn(2)
-        # TODO actually I don't know how MAKE_FUNCTION implemented..... Does 0, 1, 8, 9 have any special meaning?
-        # TODO not familiar with closure design
         if instruction.op_arg == 0:
             # Function without default argument values
             func = Function(func_name, func_code_object, frame.f_globals)
@@ -484,6 +554,25 @@ class VirtualMachine(object):
                 frame.f_globals,
                 func_defaults=default_tuple,
             )
+            frame.push(func)
+        elif instruction.op_arg == 8:
+            # Function with closure
+            closure = frame.pop()
+            func = Function(
+                func_name,
+                func_code_object,
+                frame.f_globals,
+                func_closure=closure)
+            frame.push(func)
+        elif instruction.op_arg == 9:
+            # Function with closure and default arguments
+            default_tuple, closure = frame.popn(2)
+            func = Function(
+                    func_name,
+                    func_code_object,
+                    frame.f_globals,
+                    func_defaults=default_tuple,
+                    func_closure=closure)
             frame.push(func)
         else:
             raise VirtualMachineInvalidInstructionException(
