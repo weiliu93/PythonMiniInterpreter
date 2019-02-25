@@ -104,3 +104,128 @@ def test_recursive_function_call():
     vm.reset_std_stream()
 
     assert string_output.getvalue() == "89\n573147844013817084101\n"
+
+
+def test_class_usage():
+    package_path = os.path.join(test_packages, "class_usage")
+    test_file = os.path.join(package_path, "example.py")
+
+    string_output = io.StringIO()
+    vm = VirtualMachine()
+    vm.set_std_stream(vm_out=string_output)
+    vm.run_compiled_code(open(test_file).read())
+    vm.reset_std_stream()
+
+    assert string_output.getvalue() == "name is haha, id is hehe\n"
+
+
+def test_mix_of_class_and_generator_function():
+    package_path = os.path.join(test_packages, "mix_of_class_and_generator_function")
+    test_file = os.path.join(package_path, "example.py")
+
+    string_output = io.StringIO()
+    vm = VirtualMachine()
+    vm.set_std_stream(vm_out=string_output)
+    vm.run_compiled_code(open(test_file).read())
+    vm.reset_std_stream()
+
+    target = list(map(str, list(range(1, 10, 2))))
+    assert string_output.getvalue().split() == target
+
+
+def test_import_system_library():
+    package_path = os.path.join(test_packages, "import_system_library")
+    test_file = os.path.join(package_path, "example.py")
+
+    string_output = io.StringIO()
+    vm = VirtualMachine()
+    vm.set_std_stream(vm_out=string_output)
+    vm.run_compiled_code(open(test_file).read())
+    vm.reset_std_stream()
+
+    target = "a/b\nc/d\n"
+    assert string_output.getvalue() == target
+
+
+def test_import_self_defined_module():
+    package_path = os.path.join(test_packages, "import_self_defined_module")
+    test_file = os.path.join(package_path, "a.py")
+
+    string_output = io.StringIO()
+    vm = VirtualMachine()
+    vm.set_std_stream(vm_out=string_output)
+    vm.run_python_file(test_file)
+    vm.reset_std_stream()
+
+    target = "77\n"
+    assert string_output.getvalue() == target
+
+
+def test_slice_usage_in_object():
+    package_path = os.path.join(test_packages, "slice_usage_in_object")
+    test_file = os.path.join(package_path, "example.py")
+
+    string_output = io.StringIO()
+    vm = VirtualMachine()
+    vm.set_std_stream(vm_out=string_output)
+    vm.run_python_file(test_file)
+    vm.reset_std_stream()
+
+    target = "[1, 4, 7]\n"
+    assert string_output.getvalue() == target
+
+
+def test_while_loop():
+    package_path = os.path.join(test_packages, "while_loop")
+    test_file = os.path.join(package_path, "example.py")
+
+    string_output = io.StringIO()
+    vm = VirtualMachine()
+    vm.set_std_stream(vm_out=string_output)
+    vm.run_python_file(test_file)
+    vm.reset_std_stream()
+
+    target = list(map(str, [0, 1, 3, 7, 15, 31, 63]))
+    assert string_output.getvalue().split() == target
+
+
+def test_global_variable_manipulation():
+    package_path = os.path.join(test_packages, "global_variable_manipulation")
+    test_file = os.path.join(package_path, "example.py")
+
+    string_output = io.StringIO()
+    vm = VirtualMachine()
+    vm.set_std_stream(vm_out=string_output)
+    vm.run_python_file(test_file)
+    vm.reset_std_stream()
+
+    target = list(map(str, [10, 100]))
+    assert string_output.getvalue().split() == target
+
+
+def test_multi_layer_closure():
+    package_path = os.path.join(test_packages, "multi_layer_closure")
+    test_file = os.path.join(package_path, "example.py")
+
+    string_output = io.StringIO()
+    vm = VirtualMachine()
+    vm.set_std_stream(vm_out=string_output)
+    vm.run_python_file(test_file)
+    vm.reset_std_stream()
+
+    target = "[]\n[10]\n[10, 20]\n"
+    assert string_output.getvalue() == target
+
+
+def test_class_inheritance():
+    package_path = os.path.join(test_packages, "class_inheritance")
+    test_file = os.path.join(package_path, "example.py")
+
+    string_output = io.StringIO()
+    vm = VirtualMachine()
+    vm.set_std_stream(vm_out=string_output)
+    vm.run_python_file(test_file)
+    vm.reset_std_stream()
+
+    target = "-14\n"
+    assert string_output.getvalue() == target

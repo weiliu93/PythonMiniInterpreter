@@ -13,6 +13,8 @@ import ast
 import sys
 import operator
 import logging
+import types
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +28,13 @@ class VirtualMachine(object):
         self._frames = []
         self.backup_stdin = sys.stdin
         self.backup_stdout = sys.stdout
+
+    def run_python_file(self, filepath):
+        # append python file's dir to sys paths
+        sys.path.append(os.path.dirname(filepath))
+        with open(filepath, "r") as f:
+            python_code = f.read()
+            return self.run_compiled_code(python_code)
 
     def run_compiled_code(self, code_obj):
         code_obj = self._parse_python_object(code_obj)
@@ -142,7 +151,7 @@ class VirtualMachine(object):
                     self.exec_ILLEGAL_INSTRUCTION,
                 )(frame, next_instruction)
             if why:
-                # break, exception, return_value, etc.
+                # exception, return_value, etc.
                 break
         return why
 
@@ -556,9 +565,16 @@ class VirtualMachine(object):
     def exec_MAKE_FUNCTION(self, frame, instruction):
         func_code_object, func_name = frame.popn(2)
         if instruction.op_arg == 0:
-            # Function without default argument values
-            func = Function(func_name, func_code_object, frame.f_globals)
-            frame.push(func)
+            # If top object is `__build_class__`, it means we need to create a class function based
+            # on python FunctionType
+            if frame.stack_size() > 0 and frame.top() == __build_class__:
+                frame.push(
+                    types.FunctionType(func_code_object, frame.f_globals, func_name)
+                )
+            else:
+                # Otherwise we need to create a function without default argument values
+                func = Function(func_name, func_code_object, frame.f_globals)
+                frame.push(func)
         elif instruction.op_arg == 1:
             # Function with default arguments
             default_tuple = frame.pop()
@@ -591,6 +607,14 @@ class VirtualMachine(object):
             raise VirtualMachineInvalidInstructionException(
                 "Unknown make function arg `{}`".format(instruction.op_arg)
             )
+        frame.f_lasti += 1
+
+    """
+    --------------------------------Class Operations--------------------------------
+    """
+
+    def exec_LOAD_BUILD_CLASS(self, frame, instruction):
+        frame.push(__build_class__)
         frame.f_lasti += 1
 
     """
@@ -780,9 +804,6 @@ class VirtualMachine(object):
 
 
 if __name__ == "__main__":
-    code = open("./test_code.py").read()
-    ast_root = ast.parse(code)
-    code_object = compile(ast_root, "code", "exec")
-
+    path = os.path.join(os.curdir, "test_code.py")
     vm = VirtualMachine()
-    vm.run_compiled_code(code_object)
+    vm.run_python_file(path)
