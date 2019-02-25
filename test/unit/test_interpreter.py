@@ -229,3 +229,31 @@ def test_class_inheritance():
 
     target = "-14\n"
     assert string_output.getvalue() == target
+
+
+def test_so_many_const_values_scenario():
+    package_path = os.path.join(test_packages, 'so_many_const_values_scenario')
+    test_file = os.path.join(package_path, 'example.py')
+
+    string_output = io.StringIO()
+    vm = VirtualMachine()
+    vm.set_std_stream(vm_out=string_output)
+    vm.run_python_file(test_file)
+    vm.reset_std_stream()
+
+    target = '1000\n324\n735\n'
+    assert string_output.getvalue() == target
+
+
+def test_dict_iter_item():
+    package_path = os.path.join(test_packages, 'dict_iter_item')
+    test_file = os.path.join(package_path, 'example.py')
+
+    string_output = io.StringIO()
+    vm = VirtualMachine()
+    vm.set_std_stream(vm_out=string_output)
+    vm.run_python_file(test_file)
+    vm.reset_std_stream()
+
+    target = '1 2\n3 4\n'
+    assert string_output.getvalue() == target

@@ -617,6 +617,10 @@ class VirtualMachine(object):
         frame.push(__build_class__)
         frame.f_lasti += 1
 
+    def exec_EXTENDED_ARG(self, frame, instruction):
+        # Dummy instruction here, just skip it
+        frame.f_lasti += 1
+
     """
     --------------------------------Binary Operations--------------------------------
     """
